@@ -1,0 +1,146 @@
+{% extends 'tracker/base.html' %}
+
+{% block title %}Reports — IDKH$S{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Annual <span>Reports</span></h1>
+        <p class="page-subtitle">Full-year financial overview & analytics</p>
+    </div>
+    <form method="get" style="display:flex;align-items:center;gap:8px;">
+        <select name="year" class="form-input" style="width:auto;padding:8px 14px;" onchange="this.form.submit()">
+            {% for y in years_list %}
+            <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+<!-- YEARLY STATS -->
+<div class="stat-grid" style="margin-bottom:28px;">
+    <div class="stat-card income">
+        <div class="stat-label">Total Income {{ selected_year }}</div>
+        <div class="stat-value">${{ yearly_income|floatformat:2 }}</div>
+        <div class="stat-icon">💰</div>
+    </div>
+    <div class="stat-card expense">
+        <div class="stat-label">Total Expenses {{ selected_year }}</div>
+        <div class="stat-value">${{ yearly_expense|floatformat:2 }}</div>
+        <div class="stat-icon">💸</div>
+    </div>
+    <div class="stat-card balance">
+        <div class="stat-label">Yearly Savings</div>
+        <div class="stat-value" style="{% if yearly_savings < 0 %}color:var(--red-light){% endif %}">${{ yearly_savings|floatformat:2 }}</div>
+        <div class="stat-icon">🏦</div>
+    </div>
+</div>
+
+<!-- MONTHLY BAR CHART -->
+<div class="card" style="margin-bottom:20px;">
+    <div class="card-title">📊 Monthly Income vs Expenses — {{ selected_year }}</div>
+    <div class="chart-wrap" style="height:320px;">
+        <canvas id="monthlyChart"></canvas>
+    </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+    <!-- SAVINGS LINE -->
+    <div class="card">
+        <div class="card-title">📈 Monthly Savings Trend</div>
+        <div class="chart-wrap" style="height:260px;">
+            <canvas id="savingsChart"></canvas>
+        </div>
+    </div>
+
+    <!-- CATEGORY PIE -->
+    <div class="card">
+        <div class="card-title">🍩 Top Spending Categories</div>
+        <div class="chart-wrap" style="height:260px;">
+            {% if pie_data != '[]' %}
+            <canvas id="pieChart"></canvas>
+            {% else %}
+            <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--green-700);font-size:13px;">No expense data for {{ selected_year }}</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const COLORS = ['#22c55e','#16a34a','#4ade80','#d4a017','#f5c842','#86efac','#ef4444','#15803d'];
+const GRID = 'rgba(34,197,94,0.08)';
+
+Chart.defaults.color = '#86efac';
+Chart.defaults.font.family = "'Space Mono', monospace";
+Chart.defaults.font.size = 11;
+
+const md = {{ monthly_data|safe }};
+const months = md.map(d => d.month);
+
+// Monthly bar
+new Chart(document.getElementById('monthlyChart'), {
+    type: 'bar',
+    data: {
+        labels: months,
+        datasets: [
+            { label: 'Income', data: md.map(d => d.income), backgroundColor: 'rgba(34,197,94,0.7)', borderRadius: 6 },
+            { label: 'Expense', data: md.map(d => d.expense), backgroundColor: 'rgba(239,68,68,0.5)', borderRadius: 6 },
+        ]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'top' } },
+        scales: {
+            x: { grid: { color: GRID }, border: { display: false } },
+            y: { grid: { color: GRID }, border: { display: false }, beginAtZero: true }
+        }
+    }
+});
+
+// Savings line
+new Chart(document.getElementById('savingsChart'), {
+    type: 'line',
+    data: {
+        labels: months,
+        datasets: [{
+            label: 'Savings',
+            data: md.map(d => d.savings),
+            borderColor: '#d4a017',
+            backgroundColor: 'rgba(212,160,23,0.1)',
+            borderWidth: 2,
+            pointBackgroundColor: '#d4a017',
+            fill: true,
+            tension: 0.4,
+        }]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { grid: { color: GRID }, border: { display: false } },
+            y: { grid: { color: GRID }, border: { display: false } }
+        }
+    }
+});
+
+// Category pie
+const pieLabels = {{ pie_labels|safe }};
+const pieData = {{ pie_data|safe }};
+if (pieData.length) {
+    new Chart(document.getElementById('pieChart'), {
+        type: 'doughnut',
+        data: {
+            labels: pieLabels,
+            datasets: [{ data: pieData, backgroundColor: COLORS, borderColor: '#111811', borderWidth: 3 }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            cutout: '60%',
+            plugins: { legend: { position: 'right', labels: { padding: 12, font: { size: 11 } } } }
+        }
+    });
+}
+</script>
+{% endblock %}

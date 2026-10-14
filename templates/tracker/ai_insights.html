@@ -1,0 +1,205 @@
+{% extends 'tracker/base.html' %}
+
+{% block title %}AI Insights — IDKH$S{% endblock %}
+
+{% block extra_css %}
+<style>
+.insight-box {
+    background: rgba(212,160,23,0.05);
+    border: 1px solid rgba(212,160,23,0.25);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-top: 20px;
+    line-height: 1.8;
+    font-size: 14px;
+    color: var(--text-muted);
+    white-space: pre-wrap;
+}
+.ai-loading { color: var(--gold); animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+.insight-card {
+    background: var(--dark-3);
+    border: 1px solid rgba(212,160,23,0.15);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 12px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">AI <span>Insights</span> 🤖</h1>
+        <p class="page-subtitle">Claude-powered spending analysis for {{ month_name }} {{ selected_year }}</p>
+    </div>
+    <form method="get" style="display:flex;gap:8px;align-items:center;">
+        <select name="month" class="form-input" style="width:auto;padding:8px 12px;font-size:13px;" onchange="this.form.submit()">
+            {% for num, name in months_list %}
+            <option value="{{ num }}" {% if num == selected_month %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+        </select>
+        <select name="year" class="form-input" style="width:auto;padding:8px 12px;font-size:13px;" onchange="this.form.submit()">
+            {% for y in years_list %}
+            <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+<!-- SPENDING SNAPSHOT -->
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;">
+    <div class="stat-card income" style="padding:18px;">
+        <div class="stat-label">Income</div>
+        <div class="stat-value" style="font-size:22px;">${{ total_income|floatformat:2 }}</div>
+    </div>
+    <div class="stat-card expense" style="padding:18px;">
+        <div class="stat-label">Expenses</div>
+        <div class="stat-value" style="font-size:22px;">${{ total_expense|floatformat:2 }}</div>
+    </div>
+    <div class="stat-card balance" style="padding:18px;">
+        <div class="stat-label">Balance</div>
+        <div class="stat-value" style="font-size:22px;{% if balance < 0 %}color:var(--red-light){% endif %}">${{ balance|floatformat:2 }}</div>
+    </div>
+</div>
+
+<!-- GENERATE INSIGHT -->
+<div class="card" style="border-color:rgba(212,160,23,0.3);">
+    <div class="card-title" style="color:var(--gold);">🤖 Generate AI Spending Analysis</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
+        Claude will analyze your spending for <strong>{{ month_name }} {{ selected_year }}</strong> and give personalised financial insights.
+    </p>
+
+    {% if spending_summary %}
+    <div style="margin-bottom:16px;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--green-700);margin-bottom:10px;">Spending Breakdown</div>
+        {% for item in spending_summary %}
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(34,197,94,0.06);">
+            <span style="font-size:13px;">{{ item.category }}</span>
+            <span style="font-family:'Space Mono',monospace;font-size:13px;color:var(--red-light);">${{ item.amount }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="color:var(--green-700);font-size:13px;margin-bottom:16px;">No expense data for this month yet.</p>
+    {% endif %}
+
+    <button onclick="generateInsight()" class="btn btn-primary" id="genBtn" {% if not spending_summary %}disabled{% endif %}>
+        ✨ Generate AI Insight
+    </button>
+    <button onclick="saveInsight()" class="btn btn-secondary" id="saveBtn" style="display:none;">💾 Save Insight</button>
+
+    <div id="insightOutput" class="insight-box" style="display:none;"></div>
+</div>
+
+<!-- SAVED INSIGHTS -->
+{% if existing_insights %}
+<div style="margin-top:28px;">
+    <h3 style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:16px;">📚 Saved Insights</h3>
+    {% for insight in existing_insights %}
+    <div class="insight-card">
+        <div style="font-size:11px;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">
+            🤖 {{ insight.generated_at|date:"M d, Y H:i" }}
+        </div>
+        <p style="font-size:13px;color:var(--text-muted);line-height:1.8;white-space:pre-wrap;">{{ insight.insight_text }}</p>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const MONTH = {{ selected_month }};
+const YEAR = {{ selected_year }};
+const spendingData = {{ spending_summary_json|safe }};
+const totalIncome = {{ total_income }};
+const totalExpense = {{ total_expense }};
+const balance = {{ balance }};
+let currentInsight = '';
+
+async function generateInsight() {
+    const btn = document.getElementById('genBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    const output = document.getElementById('insightOutput');
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Analyzing...';
+    saveBtn.style.display = 'none';
+    output.style.display = 'block';
+    output.innerHTML = '<span class="ai-loading">🤖 Claude is analyzing your spending patterns...</span>';
+
+    const spendingText = spendingData.map(s => `• ${s.category}: $${s.amount.toFixed(2)}`).join('\n');
+
+    const prompt = `You are a friendly, insightful personal finance advisor. Analyze the following spending data for the month and provide helpful, actionable insights.
+
+Month/Year: ${MONTH}/${YEAR}
+Total Income: $${totalIncome.toFixed(2)}
+Total Expenses: $${totalExpense.toFixed(2)}
+Net Balance: $${balance.toFixed(2)}
+
+Expense Breakdown:
+${spendingText}
+
+Please provide:
+1. 📊 A brief overview of their spending health
+2. 🔴 Top 2-3 areas of concern or overspending
+3. 💡 3 specific, actionable tips to improve finances
+4. 🎯 One financial goal recommendation for next month
+5. 💬 An encouraging closing note
+
+Keep it conversational, specific, and helpful. Use emojis for readability. Be honest but supportive.`;
+
+    try {
+        const response = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                model: "claude-sonnet-4-20250514",
+                max_tokens: 1000,
+                messages: [{ role: "user", content: prompt }]
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.content && data.content[0]) {
+            currentInsight = data.content[0].text;
+            output.textContent = currentInsight;
+            saveBtn.style.display = 'inline-flex';
+        } else {
+            output.innerHTML = '<span style="color:var(--red-light)">⚠️ Could not generate insight. Check your API connection.</span>';
+        }
+    } catch (err) {
+        output.innerHTML = `<span style="color:var(--red-light)">⚠️ Error: ${err.message}</span>`;
+    }
+
+    btn.disabled = false;
+    btn.textContent = '✨ Regenerate';
+}
+
+async function saveInsight() {
+    if (!currentInsight) return;
+    const saveBtn = document.getElementById('saveBtn');
+    saveBtn.textContent = '⏳ Saving...';
+    saveBtn.disabled = true;
+
+    try {
+        const resp = await fetch('/api/save-insight/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ insight: currentInsight, month: MONTH, year: YEAR })
+        });
+        if (resp.ok) {
+            saveBtn.textContent = '✅ Saved!';
+            setTimeout(() => location.reload(), 1200);
+        }
+    } catch (e) {
+        saveBtn.textContent = '⚠️ Failed';
+    }
+}
+</script>
+{% endblock %}

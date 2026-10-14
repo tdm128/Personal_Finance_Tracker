@@ -1,0 +1,50 @@
+{% extends 'tracker/base.html' %}
+{% block title %}Budgets — IDKH$S{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Budgets 🎯</h1>
+        <p class="page-subtitle">Set monthly spending limits per category</p>
+    </div>
+    <a href="{% url 'budget_add' %}" class="btn btn-primary">➕ Set Budget</a>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Monthly Limit</th>
+                    <th>Month / Year</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for b in budgets %}
+                <tr>
+                    <td style="font-weight:600;">{{ b.get_category_display }}</td>
+                    <td style="font-family:'Space Mono',monospace;color:var(--gold-light);">${{ b.monthly_limit|floatformat:2 }}</td>
+                    <td style="color:var(--text-muted);">{{ b.month }}/{{ b.year }}</td>
+                    <td>
+                        <div style="display:flex;gap:8px;">
+                            <a href="{% url 'budget_edit' b.pk %}" class="btn btn-secondary btn-sm">✏️ Edit</a>
+                            <form method="post" action="{% url 'budget_delete' b.pk %}" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete this budget?')">🗑️</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" style="text-align:center;padding:40px;color:var(--green-700);">
+                        No budgets yet. <a href="{% url 'budget_add' %}" style="color:var(--green-500);">Set your first budget →</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
